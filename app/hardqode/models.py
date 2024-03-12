@@ -80,10 +80,8 @@ class Student(models.Model):
     )
     available_products = models.ManyToManyField(
         Product,
-        # on_delete=models.CASCADE,
         blank=True,
         verbose_name="Доступные продукты",
-        # null=True
     )
 
     def __str__(self):
@@ -119,7 +117,7 @@ class Group(models.Model):
         verbose_name = "Группа"
         verbose_name_plural = "Группы"
 
-    product = models.OneToOneField(
+    product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
         verbose_name="Продукт"
@@ -130,7 +128,8 @@ class Group(models.Model):
     )
     students = models.ManyToManyField(
         Student,
-        verbose_name="Студенты"
+        verbose_name="Студенты",
+        blank=True
     )
 
     def __str__(self):
