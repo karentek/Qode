@@ -188,3 +188,4 @@ def handle_student_product_change(instance: Student, action, pk_set, **kwargs):
             add_student_to_group_uniform_distribution(instance, product)
         else:
             add_student_to_group_non_uniform_distribution(instance, product)
+
