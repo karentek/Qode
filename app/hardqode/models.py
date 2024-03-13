@@ -1,11 +1,8 @@
-import math
-
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
-from django.contrib.auth.models import User
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
-from django.db.models import F, Count
+from django.db.models import Count
 
 
 class Teacher(models.Model):
@@ -143,23 +140,39 @@ class Group(models.Model):
         return f"{self.pk} {self.name}"
 
 
-@receiver(m2m_changed, sender=Student.available_products.through)
-def add_student_to_group(instance: Student, action, pk_set, **kwargs):
-    if action == "post_add":
+def add_student_to_group_uniform_distribution(instance: Student, product: Product):
+    """
+    Просто добавляем студента в заранее подготовленные группы, по одному с наименьшим количеством
+    """
+    groups = Group.objects.filter(product=product).annotate(num_students=Count('students'))
+    target_group = groups.order_by('num_students').first()
+    target_group.students.add(instance)
 
+
+def add_student_to_group_non_uniform_distribution(instance: Student, product: Product):
+    """
+    Добавляем студента в группу пока не наберем максимальное колличество, если
+    придут еще студенты будет создана новая группа
+    """
+    groups = Group.objects.filter(product=product).prefetch_related('students')
+    for group in groups:
+        if group.students.count() < group.product.max_people:
+            group.students.add(instance)
+            return
+    group_name = f"Группа на {product.description}"
+    group = Group.objects.create(product=product, name=group_name)
+    group.students.add(instance)
+
+
+@receiver(m2m_changed, sender=Student.available_products.through)
+def handle_student_product_change(instance: Student, action, pk_set, **kwargs):
+    """
+    Ловим сигнал того как к студенту добавляется продукт и вызываем функцию
+    в соответствии с выбранным в самом продукте алгоритмом распределения
+    """
+    if action == "post_add":
         product = Product.objects.get(pk__in=pk_set)
         if product.uniform_distribution:
-            groups = Group.objects.filter(product=product).annotate(num_students=Count('students'))
-            target_group = groups.order_by('num_students').first()
-            target_group.students.add(instance)
+            add_student_to_group_uniform_distribution(instance, product)
         else:
-            groups = Group.objects.filter(product=product).prefetch_related('students')
-            for group in groups:
-                if group.students.count() < group.product.max_people:
-                    group.students.add(instance)
-                    break
-            else:
-                group_name = f"Группа на {product.description}"
-                group = Group.objects.create(product=product, name=group_name)
-                group.students.add(instance)
-
+            add_student_to_group_non_uniform_distribution(instance, product)
