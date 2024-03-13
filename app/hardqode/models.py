@@ -142,10 +142,22 @@ class Group(models.Model):
 
 def add_student_to_group_uniform_distribution(instance: Student, product: Product):
     """
-    Просто добавляем студента в заранее подготовленные группы, по одному с наименьшим количеством
+    Добавляем студента в заранее подготовленные группы,
+    сначала до тех пор, пока не достигнем минимально требуемого количества в группе,
+    затем когда все группы минимально заполнены, добавляем равномерно по группам
+    просто в наименьшую по количеству
     """
-    groups = Group.objects.filter(product=product).annotate(num_students=Count('students'))
-    target_group = groups.order_by('num_students').first()
+    min_people = product.min_people
+    group_counts = Group.objects.filter(product=product).annotate(num_students=Count('students'))
+    underfilled_groups = group_counts.filter(num_students__lt=min_people)
+    underfilled_groups = underfilled_groups.order_by('-num_students')
+
+    if underfilled_groups.exists():
+        target_group = underfilled_groups.first()
+    else:
+        min_student_group = group_counts.order_by('num_students').first()
+        target_group = min_student_group
+
     target_group.students.add(instance)
 
 
