@@ -3,6 +3,7 @@ from django.db import models
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from django.db.models import Count
+from django.utils import timezone
 
 
 class Teacher(models.Model):
@@ -109,7 +110,8 @@ class Lesson(models.Model):
     product = models.ForeignKey(
         Product,
         on_delete=models.PROTECT,
-        verbose_name="Продукт"
+        verbose_name="Продукт",
+        related_name='lessons'
     )
 
     def __str__(self):
@@ -163,8 +165,8 @@ def add_student_to_group_uniform_distribution(instance: Student, product: Produc
 
 def add_student_to_group_non_uniform_distribution(instance: Student, product: Product):
     """
-    Добавляем студента в группу пока не наберем максимальное колличество, если
-    придут еще студенты будет создана новая группа
+    Добавляем студента в группу пока не наберем максимальное количество, если
+    группа переполнится, будет создана новая
     """
     groups = Group.objects.filter(product=product).prefetch_related('students')
     for group in groups:
@@ -179,12 +181,15 @@ def add_student_to_group_non_uniform_distribution(instance: Student, product: Pr
 @receiver(m2m_changed, sender=Student.available_products.through)
 def handle_student_product_change(instance: Student, action, pk_set, **kwargs):
     """
-    Ловим сигнал того как к студенту добавляется продукт и вызываем функцию
-    в соответствии с выбранным в самом продукте алгоритмом распределения
+    Ловим сигнал добавления продукта к студенту и вызываем функцию
+    в соответствии с выбранным в самом продукте алгоритмом распределения,
+    если равномерный алгоритм распределения == True но продукт уже стартовал,
+    распределение пройдет по обычному сценарию набора студентов
     """
     if action == "post_add":
         product = Product.objects.get(pk__in=pk_set)
-        if product.uniform_distribution:
+
+        if product.uniform_distribution and timezone.now() < product.time_to_start:
             add_student_to_group_uniform_distribution(instance, product)
         else:
             add_student_to_group_non_uniform_distribution(instance, product)
